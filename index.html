@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="EthNote">
+<title>EthNote — Akıllı Not Defteri</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg-dark: #0f0f1a;
+    --bg-sidebar: #151525;
+    --bg-canvas: #fefcf3;
+    --accent: #ff4d6d;
+    --accent-soft: rgba(255, 77, 109, 0.15);
+    --accent-glow: rgba(255, 77, 109, 0.3);
+    --text-light: #eee8d5;
+    --text-muted: #6b6b80;
+    --toolbar-bg: rgba(21, 21, 37, 0.96);
+    --toolbar-border: rgba(255,255,255,0.07);
+    --shadow-deep: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  html, body {
+    height:100%; width:100%;
+    overflow:hidden;
+    font-family:'DM Sans', sans-serif;
+    background:var(--bg-dark);
+    color:var(--text-light);
+    touch-action:none;
+  }
+
+  /* ════ AUTH ════ */
+  .auth-screen {
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--bg-dark); z-index:9999;
+    transition: opacity 0.4s, visibility 0.4s;
+  }
+  .auth-screen.hidden { opacity:0; visibility:hidden; pointer-events:none; }
+
+  .auth-bg { position:absolute; inset:0; overflow:hidden; }
+  .auth-bg::before {
+    content:''; position:absolute;
+    width:600px; height:600px;
+    background:radial-gradient(circle, rgba(255,77,109,0.12) 0%, transparent 70%);
+    top:-100px; right:-100px; border-radius:50%;
+    animation:pulse 6s ease-in-out infinite;
+  }
+  .auth-bg::after {
+    content:''; position:absolute;
+    width:500px; height:500px;
+    background:radial-gradient(circle, rgba(99,102,241,0.08) 0%, transparent 70%);
+    bottom:-150px; left:-100px; border-radius:50%;
+    animation:pulse 8s ease-in-out infinite reverse;
+  }
+  @keyframes pulse {
+    0%,100% { transform:scale(1); opacity:0.6; }
+    50% { transform:scale(1.15); opacity:1; }
+  }
+
+  .auth-card {
+    position:relative; width:400px; max-width:90vw;
+    background:var(--bg-sidebar);
+    border:1px solid var(--toolbar-border);
+    border-radius:20px; padding:40px 32px;
+    box-shadow:var(--shadow-deep);
+    animation:cardIn 0.5s ease;
+  }
+  @keyframes cardIn {
+    from { opacity:0; transform:translateY(20px) scale(0.97); }
+    to { opacity:1; transform:translateY(0) scale(1); }
+  }
+
+  .auth-logo {
+    font-family:'Caveat', cursive; font-size:36px; font-weight:700;
+    color:var(--accent); text-align:center; margin-bottom:8px;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .auth-logo svg { width:30px; height:30px; }
+  .auth-subtitle { text-align:center; color:var(--text-muted); font-size:14px; margin-bottom:28px; }
+
+  .auth-tabs {
+    display:flex; background:rgba(255,255,255,0.04);
+    border-radius:10px; padding:3px; margin-bottom:24px;
+  }
+  .auth-tab {
+    flex:1; padding:10px; border:none; background:transparent;
+    color:var(--text-muted); font-family:'DM Sans', sans-serif;
+    font-size:14px; font-weight:600; border-radius:8px;
+    cursor:pointer; transition:all 0.2s;
+  }
+  .auth-tab.active { background:var(--accent); color:white; }
+
+  .form-group { margin-bottom:16px; }
+  .form-group label {
+    display:block; font-size:12px; font-weight:600;
+    color:var(--text-muted); margin-bottom:6px;
+    text-transform:uppercase; letter-spacing:0.5px;
+  }
+  .form-group input {
+    width:100%; padding:12px 14px;
+    background:rgba(255,255,255,0.05);
+    border:1px solid var(--toolbar-border);
+    border-radius:10px; color:var(--text-light);
+    font-family:'DM Sans', sans-serif; font-size:15px;
+    outline:none; transition:border-color 0.2s;
+  }
+  .form-group input:focus { border-color:var(--accent); }
+  .form-group input::placeholder { color:var(--text-muted); }
+
+  .auth-btn {
+    width:100%; padding:13px;
+    background:linear-gradient(135deg, var(--accent), #c0392b);
+    color:white; border:none; border-radius:10px;
+    font-family:'DM Sans', sans-serif; font-size:15px; font-weight:600;
+    cursor:pointer; transition:transform 0.15s, box-shadow 0.15s;
+    margin-top:8px;
+  }
+  .auth-btn:hover { box-shadow:0 4px 20px var(--accent-glow); }
+  .auth-btn:active { transform:scale(0.98); }
+  .auth-btn:disabled { opacity:0.6; cursor:not-allowed; }
+
+  .auth-msg {
+    border-radius:8px; padding:10px 14px; font-size:13px;
+    margin-bottom:16px; display:none;
+  }
+  .auth-msg.error { background:rgba(255,77,109,0.1); border:1px solid rgba(255,77,109,0.2); color:var(--accent); }
+  .auth-msg.success { background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.2); color:#10b981; }
+  .auth-msg.visible { display:block; }
+
+  /* ════ APP ════ */
+  .app {
+    display:flex; height:100vh; width:100vw;
+    opacity:0; transition:opacity 0.4s;
+  }
+  .app.visible { opacity:1; }
+
+  .sidebar {
+    width:280px; background:var(--bg-sidebar);
+    border-right:1px solid var(--toolbar-border);
+    display:flex; flex-direction:column;
+    transition:transform 0.35s cubic-bezier(0.4,0,0.2,1), width 0.35s cubic-bezier(0.4,0,0.2,1);
+    z-index:100; flex-shrink:0;
+  }
+  .sidebar.collapsed { width:0; transform:translateX(-280px); overflow:hidden; }
+
+  .sidebar-header { padding:20px 20px 16px; border-bottom:1px solid var(--toolbar-border); }
+  .sidebar-header-top { display:flex; align-items:center; justify-content:space-between; }
+  .sidebar-header h1 {
+    font-family:'Caveat', cursive; font-size:26px; font-weight:700;
+    color:var(--accent); display:flex; align-items:center; gap:8px;
+  }
+  .sidebar-header h1 svg { width:22px; height:22px; }
+
+  .user-badge {
+    font-size:11px; color:var(--text-muted); margin-top:6px;
+    display:flex; align-items:center; gap:6px;
+  }
+  .user-badge .dot { width:6px; height:6px; background:#10b981; border-radius:50%; }
+
+  .logout-btn {
+    background:none; border:none; color:var(--text-muted);
+    cursor:pointer; padding:6px; border-radius:6px; transition:color 0.15s;
+  }
+  .logout-btn:hover { color:var(--accent); }
+  .logout-btn svg { width:18px; height:18px; }
+
+  .btn-new-note {
+    margin-top:12px; width:100%; padding:10px 16px;
+    background:linear-gradient(135deg, var(--accent), #c0392b);
+    color:white; border:none; border-radius:10px;
+    font-family:'DM Sans', sans-serif; font-size:14px; font-weight:600;
+    cursor:pointer; display:flex; align-items:center; gap:8px; justify-content:center;
+    transition:transform 0.15s;
+  }
+  .btn-new-note:active { transform:scale(0.97); }
+
+  .note-list { flex:1; overflow-y:auto; padding:12px; scrollbar-width:none; }
+  .note-list::-webkit-scrollbar { display:none; }
+  .note-list-loading { text-align:center; padding:24px; color:var(--text-muted); font-size:13px; }
+
+  .note-item {
+    padding:12px 14px; border-radius:10px; margin-bottom:4px;
+    cursor:pointer; transition:background 0.15s; position:relative;
+    animation:fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+
+  .note-item:hover { background:rgba(255,255,255,0.05); }
+  .note-item.active { background:var(--accent-soft); }
+  .note-item-title { font-size:14px; font-weight:600; color:var(--text-light); margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note-item-date { font-size:11px; color:var(--text-muted); }
+
+  .note-item .delete-note {
+    position:absolute; right:8px; top:8px;
+    width:22px; height:22px; border-radius:6px;
+    background:rgba(255,77,109,0.15); border:none;
+    color:var(--accent); font-size:12px;
+    cursor:pointer; display:none;
+    align-items:center; justify-content:center;
+  }
+  .note-item:hover .delete-note { display:flex; }
+
+  .save-indicator {
+    font-size:11px; color:var(--text-muted);
+    padding:8px 16px; border-top:1px solid var(--toolbar-border);
+    text-align:center; display:flex; align-items:center; justify-content:center; gap:6px;
+  }
+  .save-dot { width:6px; height:6px; border-radius:50%; background:#10b981; transition:background 0.2s; }
+  .save-dot.saving { background:#f59e0b; animation:blink 0.6s infinite; }
+  @keyframes blink { 50% { opacity:0.4; } }
+
+  .main { flex:1; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+
+  .top-toolbar {
+    height:52px; background:var(--toolbar-bg);
+    backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px);
+    border-bottom:1px solid var(--toolbar-border);
+    display:flex; align-items:center; padding:0 8px; gap:2px;
+    z-index:50; flex-shrink:0;
+  }
+
+  .tool-btn {
+    width:40px; height:40px; border-radius:10px; border:none;
+    background:transparent; color:var(--text-muted);
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    transition:all 0.15s; position:relative; flex-shrink:0;
+  }
+  .tool-btn:hover { background:rgba(255,255,255,0.08); color:var(--text-light); }
+  .tool-btn.active { background:var(--accent-soft); color:var(--accent); }
+  .tool-btn svg { width:20px; height:20px; }
+
+  .toolbar-divider { width:1px; height:28px; background:var(--toolbar-border); margin:0 4px; flex-shrink:0; }
+
+  .note-title-input {
+    flex:1; min-width:60px; background:none; border:none;
+    color:var(--text-light); font-family:'DM Sans', sans-serif;
+    font-size:15px; font-weight:600; outline:none; padding:0 8px;
+  }
+  .note-title-input::placeholder { color:var(--text-muted); }
+
+  .color-popup, .stroke-popup {
+    position:absolute; top:48px;
+    background:var(--toolbar-bg); backdrop-filter:blur(20px);
+    border:1px solid var(--toolbar-border); border-radius:12px;
+    padding:10px; display:none; z-index:200;
+    box-shadow:var(--shadow-deep);
+  }
+  .color-popup.visible { display:flex; gap:6px; flex-wrap:wrap; }
+  .stroke-popup.visible { display:flex; flex-direction:column; gap:6px; }
+
+  .color-dot {
+    width:28px; height:28px; border-radius:50%;
+    border:2px solid transparent; cursor:pointer;
+    transition:transform 0.15s, border-color 0.15s;
+  }
+  .color-dot:hover { transform:scale(1.15); }
+  .color-dot.active { border-color:white; }
+
+  .stroke-option {
+    display:flex; align-items:center; gap:10px;
+    cursor:pointer; padding:6px 10px; border-radius:6px;
+    transition:background 0.15s;
+  }
+  .stroke-option:hover { background:rgba(255,255,255,0.08); }
+  .stroke-option.active { background:var(--accent-soft); }
+  .stroke-option .stroke-label { font-size:12px; color:var(--text-muted); }
+
+  .canvas-container { flex:1; position:relative; overflow:auto; background:var(--bg-canvas); }
+  .canvas-container::-webkit-scrollbar { width:6px; }
+  .canvas-container::-webkit-scrollbar-track { background:transparent; }
+  .canvas-container::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.15); border-radius:3px; }
+
+  #drawCanvas { display:block; cursor:crosshair; touch-action:none; }
+  .canvas-container.tool-text #drawCanvas { cursor:text; }
+  .canvas-container.tool-eraser #drawCanvas {
+    cursor:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='10' fill='white' stroke='%23999' stroke-width='1'/%3E%3C/svg%3E") 12 12, auto;
+  }
+
+  .text-overlay {
+    position:absolute; min-width:60px; min-height:30px;
+    padding:4px 8px; font-family:'DM Sans', sans-serif;
+    font-size:16px; color:#1a1a2e; background:transparent;
+    border:2px dashed transparent; outline:none; resize:none;
+    overflow:hidden; cursor:move; z-index:10; line-height:1.6;
+  }
+  .text-overlay:focus { border-color:var(--accent); cursor:text; }
+
+  .paper-lines {
+    position:absolute; top:0; left:0;
+    width:100%; height:100%;
+    pointer-events:none; z-index:0;
+  }
+
+  .zoom-controls {
+    position:absolute; bottom:16px; right:16px;
+    display:flex; gap:4px; z-index:50;
+  }
+  .zoom-btn {
+    width:36px; height:36px; border-radius:8px;
+    border:1px solid var(--toolbar-border);
+    background:var(--toolbar-bg); color:var(--text-light);
+    font-size:16px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    backdrop-filter:blur(10px);
+  }
+  .zoom-btn:hover { background:rgba(255,255,255,0.1); }
+  .zoom-label {
+    padding:0 8px; height:36px; border-radius:8px;
+    background:var(--toolbar-bg); color:var(--text-muted);
+    font-size:12px; font-weight:500;
+    display:flex; align-items:center;
+    border:1px solid var(--toolbar-border);
+  }
+
+  @media (max-width:768px) {
+    .sidebar { position:absolute; left:0; top:0; height:100%; z-index:500; box-shadow:var(--shadow-deep); }
+    .sidebar.collapsed { transform:translateX(-280px); }
+    .top-toolbar { padding:0 4px; gap:1px; }
+    .tool-btn { width:36px; height:36px; }
+    .toolbar-divider { margin:0 2px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Auth Screen -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-bg"></div>
+  <div class="auth-card">
+    <div class="auth-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+      EthNote
+    </div>
+    <p class="auth-subtitle">Not al, çiz, her yerden eriş</p>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchAuthTab('login')">Giriş Yap</button>
+      <button class="auth-tab" onclick="switchAuthTab('signup')">Kayıt Ol</button>
+    </div>
+
+    <div class="auth-msg error" id="authError"></div>
+    <div class="auth-msg success" id="authSuccess"></div>
+
+    <div id="loginForm">
+      <div class="form-group">
+        <label>E-posta</label>
+        <input type="email" id="loginEmail" placeholder="ornek@mail.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>Şifre</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="auth-btn" id="loginBtn" onclick="handleLogin()">Giriş Yap</button>
+    </div>
+
+    <div id="signupForm" style="display:none">
+      <div class="form-group">
+        <label>E-posta</label>
+        <input type="email" id="signupEmail" placeholder="ornek@mail.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>Şifre (en az 6 karakter)</label>
+        <input type="password" id="signupPassword" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="form-group">
+        <label>Şifre Tekrar</label>
+        <input type="password" id="signupPasswordConfirm" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="auth-btn" id="signupBtn" onclick="handleSignup()">Kayıt Ol</button>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div class="app" id="app">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-header-top">
+        <h1>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          EthNote
+        </h1>
+        <button class="logout-btn" onclick="handleLogout()" title="Çıkış Yap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+      <div class="user-badge"><span class="dot"></span><span id="userEmail">—</span></div>
+      <button class="btn-new-note" onclick="createNewNote()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Yeni Not
+      </button>
+    </div>
+    <div class="note-list" id="noteList"><div class="note-list-loading">Notlar yükleniyor…</div></div>
+    <div class="save-indicator"><span class="save-dot" id="saveDot"></span><span id="saveStatus">Kaydedildi</span></div>
+  </div>
+
+  <div class="main">
+    <div class="top-toolbar">
+      <button class="tool-btn" onclick="toggleSidebar()" title="Menü">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="toolbar-divider"></div>
+
+      <button class="tool-btn active" id="btnPen" onclick="setTool('pen')" title="Kalem (P)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+      </button>
+      <button class="tool-btn" id="btnHighlighter" onclick="setTool('highlighter')" title="Fosforlu (H)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l-6 6v3h9l3-3"/><path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>
+      </button>
+      <button class="tool-btn" id="btnEraser" onclick="setTool('eraser')" title="Silgi (E)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20H7L3 16l8-8 9 9-3 3z"/><path d="M6 11l4-4"/></svg>
+      </button>
+      <button class="tool-btn" id="btnText" onclick="setTool('text')" title="Metin (T)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+      </button>
+      <div class="toolbar-divider"></div>
+
+      <div style="position:relative">
+        <button class="tool-btn" id="btnColor" onclick="togglePopup('color')" title="Renk">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" id="colorIndicator" fill="#1a1a2e" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/></svg>
+        </button>
+        <div class="color-popup" id="colorPopup"></div>
+      </div>
+      <div style="position:relative">
+        <button class="tool-btn" onclick="togglePopup('stroke')" title="Kalınlık">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8" stroke-width="1.5"/><line x1="4" y1="14" x2="20" y2="14" stroke-width="3"/><line x1="4" y1="20" x2="20" y2="20" stroke-width="5"/></svg>
+        </button>
+        <div class="stroke-popup" id="strokePopup"></div>
+      </div>
+      <div class="toolbar-divider"></div>
+
+      <button class="tool-btn" onclick="undo()" title="Geri Al">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+      </button>
+      <button class="tool-btn" onclick="redo()" title="İleri Al">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
+      </button>
+      <div class="toolbar-divider"></div>
+
+      <button class="tool-btn" onclick="cyclePaper()" title="Kağıt Stili">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <button class="tool-btn" onclick="clearCanvas()" title="Temizle">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+
+      <div style="flex:1"></div>
+      <input type="text" class="note-title-input" id="noteTitleInput" placeholder="Not başlığı…" oninput="onTitleChange()">
+    </div>
+
+    <div class="canvas-container" id="canvasContainer">
+      <svg class="paper-lines" id="paperLines"></svg>
+      <canvas id="drawCanvas"></canvas>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomOut()">−</button>
+        <div class="zoom-label" id="zoomLabel">100%</div>
+        <button class="zoom-btn" onclick="zoomIn()">+</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+// SUPABASE — DOĞRUDAN BAĞLANTI
+// ══════════════════════════════════════
+const SUPA_URL = 'https://hmkinhdpcbwbglflhlrw.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhta2luaGRwY2J3YmdsZmxobHJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxMDUwMzMsImV4cCI6MjA5MTY4MTAzM30.Bj4kW4afY3r_aS6fAlne7Ex6IZQWFmVQ0TcLPUXN9NY';
+
+const sb = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// ══════════════════════════════════════
+// STATE
+// ══════════════════════════════════════
+const W = 1200, H = 1800;
+let user, notes = [], activeId = null;
+let tool = 'pen', color = '#1a1a2e', stroke = 2, paper = 'lined', zoom = 1;
+let drawing = false, curPath = null, paths = [], redoStack = [];
+let saveTimer = null;
+let canvas, ctx, container;
+
+const penColors = ['#1a1a2e','#2563eb','#e94560','#10b981','#f59e0b','#8b5cf6','#6b7280'];
+const hlColors = ['rgba(250,204,21,0.4)','rgba(236,72,153,0.3)','rgba(59,130,246,0.3)','rgba(16,185,129,0.3)','rgba(249,115,22,0.3)','rgba(139,92,246,0.3)'];
+const strokes = [{w:1,l:'İnce'},{w:2,l:'Normal'},{w:4,l:'Kalın'},{w:8,l:'Çok Kalın'}];
+
+// ══════════════════════════════════════
+// BOOT
+// ══════════════════════════════════════
+(async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) { user = session.user; enterApp(); }
+  // else auth screen is already visible
+
+  sb.auth.onAuthStateChange((ev, s) => {
+    if (ev === 'SIGNED_OUT') {
+      user = null; notes = [];
+      document.getElementById('app').classList.remove('visible');
+      document.getElementById('authScreen').classList.remove('hidden');
+    }
+  });
+})();
+
+// ══════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  hide('authError'); hide('authSuccess');
+  if (tab === 'login') {
+    document.querySelectorAll('.auth-tab')[0].classList.add('active');
+    document.getElementById('loginForm').style.display = 'block';
+    document.getElementById('signupForm').style.display = 'none';
+  } else {
+    document.querySelectorAll('.auth-tab')[1].classList.add('active');
+    document.getElementById('loginForm').style.display = 'none';
+    document.getElementById('signupForm').style.display = 'block';
+  }
+}
+
+async function handleLogin() {
+  const email = val('loginEmail'), pw = val('loginPassword'), btn = document.getElementById('loginBtn');
+  if (!email || !pw) return showErr('authError', 'E-posta ve şifre gerekli.');
+  btn.disabled = true; btn.textContent = 'Giriş yapılıyor…';
+
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: pw });
+  if (error) {
+    showErr('authError', error.message === 'Invalid login credentials' ? 'E-posta veya şifre hatalı.' : error.message);
+    btn.disabled = false; btn.textContent = 'Giriş Yap'; return;
+  }
+  user = data.user; enterApp();
+}
+
+async function handleSignup() {
+  const email = val('signupEmail'), pw = val('signupPassword'), pw2 = val('signupPasswordConfirm');
+  const btn = document.getElementById('signupBtn');
+  hide('authError'); hide('authSuccess');
+  if (!email || !pw) return showErr('authError', 'Tüm alanları doldurun.');
+  if (pw.length < 6) return showErr('authError', 'Şifre en az 6 karakter olmalı.');
+  if (pw !== pw2) return showErr('authError', 'Şifreler eşleşmiyor.');
+
+  btn.disabled = true; btn.textContent = 'Kayıt yapılıyor…';
+  const { data, error } = await sb.auth.signUp({ email, password: pw });
+  btn.disabled = false; btn.textContent = 'Kayıt Ol';
+
+  if (error) return showErr('authError', error.message);
+
+  if (data.user && data.session) { user = data.user; enterApp(); }
+  else {
+    showMsg('authSuccess', 'Kayıt başarılı! E-postanızdaki onay linkine tıklayın, sonra giriş yapın.');
+    switchAuthTab('login');
+  }
+}
+
+async function handleLogout() { await sb.auth.signOut(); }
+
+function enterApp() {
+  document.getElementById('authScreen').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('userEmail').textContent = user.email;
+  initCanvas();
+  loadNotes();
+}
+
+// ══════════════════════════════════════
+// SUPABASE CRUD
+// ══════════════════════════════════════
+async function loadNotes() {
+  const { data, error } = await sb.from('notes').select('*').eq('user_id', user.id).order('updated_at', { ascending: false });
+  if (error) {
+    console.error(error);
+    document.getElementById('noteList').innerHTML = '<div class="note-list-loading">Tablo bulunamadı. SQL kurulumunu kontrol edin.</div>';
+    return;
+  }
+  notes = data || [];
+  if (!notes.length) await createNewNote();
+  else switchNote(notes[0].id);
+  renderList();
+}
+
+async function createNewNote() {
+  const { data, error } = await sb.from('notes')
+    .insert({ user_id: user.id, title: '', paths: [], text_elements: [], paper_style: 'lined' })
+    .select().single();
+  if (error) { console.error(error); return; }
+  notes.unshift(data);
+  switchNote(data.id);
+  renderList();
+}
+
+function switchNote(id) {
+  activeId = id;
+  const n = notes.find(x => x.id === id);
+  if (!n) return;
+
+  paths = (n.paths || []).map(p => ({ ...p, points: [...p.points] }));
+  redoStack = [];
+  paper = n.paper_style || 'lined';
+  document.getElementById('noteTitleInput').value = n.title || '';
+
+  container.querySelectorAll('.text-overlay').forEach(el => el.remove());
+  (n.text_elements || []).forEach(t => addTextEl(t.x, t.y, t.text, t.id, false));
+
+  drawPaper(); render(); renderList();
+}
+
+function scheduleSave() {
+  showSaving();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    const texts = [...container.querySelectorAll('.text-overlay')].map(el => ({
+      id: el.dataset.id, x: parseInt(el.style.left), y: parseInt(el.style.top), text: el.innerText
+    }));
+    const n = notes.find(x => x.id === activeId);
+    if (n) { n.paths = paths.map(p => ({...p, points:[...p.points]})); n.text_elements = texts; n.paper_style = paper; }
+
+    await sb.from('notes').update({
+      title: n?.title || '', paths: n?.paths || [], text_elements: texts, paper_style: paper
+    }).eq('id', activeId);
+
+    showSaved();
+  }, 800);
+}
+
+async function deleteNote(id, e) {
+  e.stopPropagation();
+  if (!confirm('Bu notu silmek istediğinize emin misiniz?')) return;
+  await sb.from('notes').delete().eq('id', id);
+  notes = notes.filter(x => x.id !== id);
+  if (!notes.length) await createNewNote();
+  else if (activeId === id) switchNote(notes[0].id);
+  renderList();
+}
+
+// ══════════════════════════════════════
+// UI HELPERS
+// ══════════════════════════════════════
+function val(id) { return document.getElementById(id).value.trim(); }
+function hide(id) { document.getElementById(id).classList.remove('visible'); }
+function showErr(id, msg) { const el = document.getElementById(id); el.textContent = msg; el.className = 'auth-msg error visible'; }
+function showMsg(id, msg) { const el = document.getElementById(id); el.textContent = msg; el.className = 'auth-msg success visible'; }
+function showSaving() { document.getElementById('saveDot').classList.add('saving'); document.getElementById('saveStatus').textContent = 'Kaydediliyor…'; }
+function showSaved() { document.getElementById('saveDot').classList.remove('saving'); document.getElementById('saveStatus').textContent = 'Kaydedildi'; }
+
+function renderList() {
+  document.getElementById('noteList').innerHTML = notes.map(n => {
+    const t = n.title || 'Başlıksız Not';
+    const d = new Date(n.updated_at || n.created_at).toLocaleDateString('tr-TR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+    return `<div class="note-item ${n.id===activeId?'active':''}" onclick="switchNote('${n.id}')">
+      <div class="note-item-title">${t}</div><div class="note-item-date">${d}</div>
+      <button class="delete-note" onclick="deleteNote('${n.id}',event)">✕</button></div>`;
+  }).join('');
+}
+
+function onTitleChange() {
+  const n = notes.find(x => x.id === activeId);
+  if (n) { n.title = document.getElementById('noteTitleInput').value; renderList(); scheduleSave(); }
+}
+
+function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+
+// ══════════════════════════════════════
+// TOOLS
+// ══════════════════════════════════════
+function setTool(t) {
+  tool = t;
+  ['Pen','Highlighter','Eraser','Text'].forEach(n => document.getElementById('btn'+n)?.classList.remove('active'));
+  document.getElementById('btn' + t.charAt(0).toUpperCase() + t.slice(1)).classList.add('active');
+
+  container.className = 'canvas-container' + (t === 'text' ? ' tool-text' : t === 'eraser' ? ' tool-eraser' : '');
+
+  if (t === 'pen') { color = '#1a1a2e'; stroke = 2; }
+  else if (t === 'highlighter') { color = hlColors[0]; stroke = 20; }
+
+  document.getElementById('colorIndicator').setAttribute('fill', color);
+  buildColorPopup(); buildStrokePopup(); closePopups();
+}
+
+function buildColorPopup() {
+  const cols = tool === 'highlighter' ? hlColors : penColors;
+  document.getElementById('colorPopup').innerHTML = cols.map(c =>
+    `<div class="color-dot ${c===color?'active':''}" style="background:${c}" onclick="pickColor('${c}')"></div>`
+  ).join('');
+}
+
+function buildStrokePopup() {
+  document.getElementById('strokePopup').innerHTML = strokes.map(s =>
+    `<div class="stroke-option ${s.w===stroke?'active':''}" onclick="pickStroke(${s.w})">
+      <svg width="40" height="12"><line x1="0" y1="6" x2="40" y2="6" stroke="white" stroke-width="${s.w}" stroke-linecap="round"/></svg>
+      <span class="stroke-label">${s.l}</span></div>`
+  ).join('');
+}
+
+function pickColor(c) { color = c; document.getElementById('colorIndicator').setAttribute('fill', c); buildColorPopup(); }
+function pickStroke(w) { stroke = w; buildStrokePopup(); }
+
+function togglePopup(which) {
+  const other = which === 'color' ? 'strokePopup' : 'colorPopup';
+  document.getElementById(other).classList.remove('visible');
+  document.getElementById(which + 'Popup').classList.toggle('visible');
+}
+function closePopups() { document.getElementById('colorPopup').classList.remove('visible'); document.getElementById('strokePopup').classList.remove('visible'); }
+
+// ══════════════════════════════════════
+// PAPER
+// ══════════════════════════════════════
+function cyclePaper() {
+  const s = ['lined','grid','dotted','blank'];
+  paper = s[(s.indexOf(paper)+1) % s.length];
+  drawPaper(); scheduleSave();
+}
+
+function drawPaper() {
+  const svg = document.getElementById('paperLines');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.style.width = W+'px'; svg.style.height = H+'px';
+  let h = ''; const lc = '#ddd8cc', sp = 32;
+  if (paper === 'lined') {
+    for (let y = sp*2; y < H; y += sp) h += `<line x1="60" y1="${y}" x2="${W-40}" y2="${y}" stroke="${lc}" stroke-width="0.7"/>`;
+    h += `<line x1="72" y1="40" x2="72" y2="${H-40}" stroke="rgba(255,77,109,0.2)" stroke-width="1"/>`;
+  } else if (paper === 'grid') {
+    for (let y = sp; y < H; y += sp) h += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="${lc}" stroke-width="0.4"/>`;
+    for (let x = sp; x < W; x += sp) h += `<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="${lc}" stroke-width="0.4"/>`;
+  } else if (paper === 'dotted') {
+    for (let y = sp; y < H; y += sp) for (let x = sp; x < W; x += sp) h += `<circle cx="${x}" cy="${y}" r="1" fill="${lc}"/>`;
+  }
+  svg.innerHTML = h;
+}
+
+// ══════════════════════════════════════
+// CANVAS
+// ══════════════════════════════════════
+function initCanvas() {
+  canvas = document.getElementById('drawCanvas');
+  ctx = canvas.getContext('2d');
+  container = document.getElementById('canvasContainer');
+  canvas.width = W; canvas.height = H;
+  canvas.style.width = W+'px'; canvas.style.height = H+'px';
+
+  canvas.addEventListener('pointerdown', onDown);
+  canvas.addEventListener('pointermove', onMove);
+  canvas.addEventListener('pointerup', onUp);
+  canvas.addEventListener('pointerleave', onUp);
+  canvas.addEventListener('click', onCanvasClick);
+
+  buildColorPopup(); buildStrokePopup(); drawPaper();
+}
+
+function pos(e) {
+  const r = canvas.getBoundingClientRect();
+  const cx = e.touches ? e.touches[0].clientX : e.clientX;
+  const cy = e.touches ? e.touches[0].clientY : e.clientY;
+  return { x: (cx - r.left) * (canvas.width / r.width), y: (cy - r.top) * (canvas.height / r.height) };
+}
+
+function onDown(e) {
+  if (tool === 'text' || (e.touches && e.touches.length > 1)) return;
+  e.preventDefault(); drawing = true;
+  const p = pos(e);
+  if (tool === 'eraser') { eraseAt(p.x, p.y); return; }
+  curPath = { color, width: stroke, tool, points: [p], composite: tool === 'highlighter' ? 'multiply' : 'source-over' };
+}
+
+function onMove(e) {
+  if (!drawing) return; e.preventDefault();
+  const p = pos(e);
+  if (tool === 'eraser') { eraseAt(p.x, p.y); return; }
+  if (curPath) { curPath.points.push(p); render(); drawPath(curPath); }
+}
+
+function onUp() {
+  if (!drawing) return; drawing = false;
+  if (curPath?.points.length) { paths.push(curPath); redoStack = []; curPath = null; scheduleSave(); }
+  render();
+}
+
+function eraseAt(x, y) {
+  const before = paths.length;
+  paths = paths.filter(p => !p.points.some(pt => Math.hypot(pt.x-x, pt.y-y) < 20));
+  if (paths.length !== before) { render(); scheduleSave(); }
+}
+
+function drawPath(p) {
+  if (p.points.length < 2) return;
+  ctx.save();
+  ctx.globalCompositeOperation = p.composite || 'source-over';
+  ctx.strokeStyle = p.color; ctx.lineWidth = p.width;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(p.points[0].x, p.points[0].y);
+  for (let i = 1; i < p.points.length - 1; i++) {
+    const xc = (p.points[i].x + p.points[i+1].x) / 2;
+    const yc = (p.points[i].y + p.points[i+1].y) / 2;
+    ctx.quadraticCurveTo(p.points[i].x, p.points[i].y, xc, yc);
+  }
+  ctx.lineTo(p.points[p.points.length-1].x, p.points[p.points.length-1].y);
+  ctx.stroke(); ctx.restore();
+}
+
+function render() { ctx.clearRect(0, 0, W, H); paths.forEach(drawPath); }
+
+// ══════════════════════════════════════
+// TEXT
+// ══════════════════════════════════════
+function onCanvasClick(e) {
+  if (tool !== 'text') return;
+  const x = e.clientX - container.getBoundingClientRect().left + container.scrollLeft;
+  const y = e.clientY - container.getBoundingClientRect().top + container.scrollTop;
+  addTextEl(x, y, '', Date.now().toString(), true);
+}
+
+function addTextEl(x, y, text, id, focus) {
+  const el = document.createElement('div');
+  el.className = 'text-overlay'; el.contentEditable = true;
+  el.style.left = x+'px'; el.style.top = y+'px';
+  el.innerText = text || ''; el.dataset.id = id;
+
+  el.addEventListener('blur', () => { if (!el.innerText.trim()) el.remove(); scheduleSave(); });
+  el.addEventListener('input', () => scheduleSave());
+
+  let drag = false, ox, oy;
+  el.addEventListener('mousedown', e => { if (document.activeElement === el) return; drag = true; ox = e.offsetX; oy = e.offsetY; });
+  document.addEventListener('mousemove', e => { if (!drag) return; el.style.left = (e.clientX - container.getBoundingClientRect().left + container.scrollLeft - ox)+'px'; el.style.top = (e.clientY - container.getBoundingClientRect().top + container.scrollTop - oy)+'px'; });
+  document.addEventListener('mouseup', () => { if (drag) { drag = false; scheduleSave(); } });
+
+  container.appendChild(el);
+  if (focus) el.focus();
+}
+
+// ══════════════════════════════════════
+// UNDO / REDO / ZOOM / CLEAR
+// ══════════════════════════════════════
+function undo() { if (!paths.length) return; redoStack.push(paths.pop()); render(); scheduleSave(); }
+function redo() { if (!redoStack.length) return; paths.push(redoStack.pop()); render(); scheduleSave(); }
+
+function setZoom(z) {
+  zoom = Math.max(0.5, Math.min(2, z));
+  canvas.style.width = (W*zoom)+'px'; canvas.style.height = (H*zoom)+'px';
+  document.getElementById('paperLines').style.width = (W*zoom)+'px';
+  document.getElementById('paperLines').style.height = (H*zoom)+'px';
+  document.getElementById('zoomLabel').textContent = Math.round(zoom*100)+'%';
+}
+function zoomIn() { setZoom(zoom+0.1); }
+function zoomOut() { setZoom(zoom-0.1); }
+
+function clearCanvas() {
+  if (!paths.length && !container.querySelectorAll('.text-overlay').length) return;
+  if (!confirm('Sayfayı temizlemek istediğinize emin misiniz?')) return;
+  paths = []; redoStack = [];
+  container.querySelectorAll('.text-overlay').forEach(el => el.remove());
+  render(); scheduleSave(); renderList();
+}
+
+// ══════════════════════════════════════
+// GLOBAL EVENTS
+// ══════════════════════════════════════
+document.addEventListener('click', e => {
+  if (!e.target.closest('#btnColor') && !e.target.closest('#colorPopup')) document.getElementById('colorPopup')?.classList.remove('visible');
+  if (!e.target.closest('[onclick*="togglePopup"]') && !e.target.closest('#strokePopup')) document.getElementById('strokePopup')?.classList.remove('visible');
+});
+
+document.addEventListener('keydown', e => {
+  if (e.target.classList.contains('text-overlay') || e.target.tagName === 'INPUT') return;
+  if ((e.metaKey||e.ctrlKey) && e.key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  if (e.key === 'p') setTool('pen');
+  if (e.key === 'h') setTool('highlighter');
+  if (e.key === 'e') setTool('eraser');
+  if (e.key === 't') setTool('text');
+});
+
+// Enter tuşuyla form gönder
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  if (e.target.id === 'loginPassword') handleLogin();
+  if (e.target.id === 'signupPasswordConfirm') handleSignup();
+});
+</script>
+</body>
+</html>
