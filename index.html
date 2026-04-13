@@ -9,7 +9,17 @@
 <title>EthNote — Akıllı Not Defteri</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Caveat:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// iPad Safari uyumluluk
+if (!window.globalThis) window.globalThis = window;
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// CDN fallback
+if (typeof supabase === 'undefined' && typeof window.supabase === 'undefined') {
+  document.write('<scr'+'ipt src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\/scr'+'ipt>');
+}
+</script>
 <style>
   :root {
     --bg-dark: #0f0f1a;
@@ -495,17 +505,22 @@ const strokes = [{w:1,l:'İnce'},{w:2,l:'Normal'},{w:4,l:'Kalın'},{w:8,l:'Çok 
 // BOOT
 // ══════════════════════════════════════
 (async function boot() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session?.user) { user = session.user; enterApp(); }
-  // else auth screen is already visible
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.user) { user = session.user; enterApp(); }
+    // else auth screen is already visible
 
-  sb.auth.onAuthStateChange((ev, s) => {
-    if (ev === 'SIGNED_OUT') {
-      user = null; notes = [];
-      document.getElementById('app').classList.remove('visible');
-      document.getElementById('authScreen').classList.remove('hidden');
-    }
-  });
+    sb.auth.onAuthStateChange((ev, s) => {
+      if (ev === 'SIGNED_OUT') {
+        user = null; notes = [];
+        document.getElementById('app').classList.remove('visible');
+        document.getElementById('authScreen').classList.remove('hidden');
+      }
+    });
+  } catch(err) {
+    console.error('Boot error:', err);
+    document.getElementById('authScreen').classList.remove('hidden');
+  }
 })();
 
 // ══════════════════════════════════════
